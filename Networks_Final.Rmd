@@ -1,0 +1,2908 @@
+---
+title: "Final_Network"
+author: "Courtney C"
+date: "2026-02-03"
+output: html_document
+---
+
+```{r}
+library(ggpubr)
+library(ggraph)
+library(dplyr)
+library(igraph) 
+library(sna)
+library(intergraph)
+library(gplots)
+```
+
+
+```{r}
+data <- read.csv("COCAINE_DEALING.csv")
+```
+
+```{r}
+adj_matrix <- as.matrix(data)
+```
+
+```{r}
+library(igraph)
+
+raw_data <- read.csv("COCAINE_DEALING.csv", check.names = FALSE)
+
+
+row_names <- raw_data[, 1]
+
+adj_matrix <- as.matrix(raw_data[, -1])
+
+rownames(adj_matrix) <- row_names
+
+dim(adj_matrix)
+nrow(adj_matrix) == ncol(adj_matrix)
+
+
+```
+```{r}
+net <- graph_from_adjacency_matrix(
+  adj_matrix,
+  mode = "directed",
+  weighted = TRUE,
+  diag = TRUE
+)
+
+net
+```
+
+```{r}
+un_net <- graph_from_adjacency_matrix(
+  adj_matrix,
+  mode = "undirected",
+  weighted = TRUE,
+  diag = FALSE
+)
+
+net
+un_net
+```
+
+
+```{r}
+ggraph(net, layout = "kk") + 
+  geom_edge_link() + 
+  geom_node_point() +
+  ggnetwork::theme_blank()
+```
+
+```{r}
+ggraph(net, layout = "stress") + 
+  geom_edge_link() + 
+  geom_node_point() +
+  ggnetwork::theme_blank()
+```
+
+```{r}
+ggraph(net, layout = "stress") +
+  geom_edge_link() +
+  geom_node_point(
+    aes(color = ifelse(name == "Kay", "highlight", "normal")),
+    size = ifelse(V(net)$name == "Kay", 5, 2)
+  ) +
+  geom_node_label(
+    aes(label = ifelse(name == "Kay", name, ""),
+        color = ifelse(name == "Kay", "highlight", "normal")),
+    repel = TRUE, 
+    size = 5,
+    fontface = "bold",
+    fill = "lightyellow",
+    label.size = 0.5
+  ) +
+  scale_color_manual(values = c("highlight" = "skyblue", "normal" = "black"), guide = "none") +
+  ggnetwork::theme_blank()
+```
+
+```{r}
+ggraph(net, layout = "stress") +
+  geom_edge_link(arrow = grid::arrow(angle = 20, #how wide should the arrow be
+                                      length = unit(0.10, "in"), #how long should the arrow be
+                                      type = "closed")) + #vs open arrow
+  geom_node_point() +
+  ggnetwork::theme_blank()
+
+ggraph(net, layout = "stress") +
+  geom_edge_link(aes(width = weight)) + #weight is the name of the variable for tie strength
+  scale_edge_width(range = c(0.15, 2)) + #default width is VERY wide, so I recommend reducing
+  geom_node_point() +
+  ggnetwork::theme_blank() + 
+  theme(legend.position = "none") # I don't find the legend necessary in this case
+
+ggraph(net, layout = "stress") + 
+  geom_edge_link0(edge_color=ifelse(E(net)$friends == 1, "#82260d", "grey50")) + #friendly ties are red, others are grey
+  #NOTE to get colors to render you must use geom_edge_link0 rather than geom_edge_link
+  geom_node_point() +
+  ggnetwork::theme_blank()
+```
+
+
+```{r}
+# Check what vertex/edge attributes we have
+print(net)
+cat("\nVertex attributes:", vertex_attr_names(net), "\n")
+cat("Edge attributes:", edge_attr_names(net), "\n")
+```
+
+
+
+```{r}
+library(ggraph)
+library(igraph)
+
+ggraph(net, layout = "fr") +
+  geom_edge_link(aes(alpha = 0.5), arrow = arrow(length = unit(2, 'mm')), 
+                 end_cap = circle(3, 'mm')) +
+  geom_node_point(aes(size = ifelse(name == "kay", 4, 2),
+                      color = ifelse(name == "kay", "Kay", "Other")),
+                  show.legend = FALSE) +
+  geom_node_text(aes(label = ifelse(name == "kay", "KAY", NA)),
+                 color = "red", fontface = "bold", size = 6,
+                 repel = TRUE, nudge_y = 0.2) +
+  scale_color_manual(values = c("Kay" = "gold", "Other" = "lightblue")) +
+  scale_size_manual(values = c(4, 2)) +
+  theme_void() +
+  labs(title = "Communication Network - Kay Highlighted")
+```
+
+```{r}
+igraph::vcount(net)
+igraph::ecount(net)
+```
+
+```{r}
+#### degree####
+deg <- igraph::degree(net) #total degree
+deg 
+deg_u <- igraph::degree(un_net) #total degree
+deg_u
+# directed and undirected are the same, because it's the total number of ties found in the edgelist
+
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(
+    aes(fill = ifelse(name == "Kay", "highlight", "normal"),
+        size = igraph::degree(net, mode = "all")),
+    color = "black", 
+    shape = 21
+  ) +
+  scale_fill_manual(
+    values = c("highlight" = "skyblue", "normal" = "#EFD9D3"),
+    guide = "none"
+  ) +
+  guides(fill = "none") +  # Additional explicit removal
+  ggnetwork::theme_blank()
+```
+
+
+```{r}
+# in degree####
+deg_in <- igraph::degree(net, mode = "in") #in degree
+deg_in
+deg_in_u <- igraph::degree(un_net, mode = "in") #in degree
+deg_in_u
+#directed and undirected are NOT the same, because now we are accounting for tie direction in the calculation
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5,
+                 arrow = grid::arrow(angle = 20,
+                                     length = unit(0.10, "in"),
+                                     type = "closed"),
+                 start_cap = circle(2, 'mm'),  # Reduced from 10 to 2
+                 end_cap = circle(2, 'mm')) +  # Reduced from 10 to 2
+                 
+  geom_node_point(
+    aes(fill = ifelse(name == "Kay", "highlight", "normal"),
+        size = igraph::degree(net, mode = "in")),
+    color = "black", 
+    shape = 21
+  ) +
+  scale_fill_manual(
+    values = c("highlight" = "skyblue", "normal" = "#EFD9D3"),
+    guide = "none"
+  ) +
+  guides(size = "none") +  # This removes the size legend
+  ggnetwork::theme_blank()
+```
+```{r}
+# out degree####
+deg_out <- igraph::degree(net, mode = "out") #out degree
+deg_out
+deg_out_u <- igraph::degree(un_net, mode = "out") #out degree
+deg_out_u
+#directed and undirected are NOT the same, because now we are accounting for tie direction in the calculation
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5,
+                 arrow = grid::arrow(angle = 20,
+                                     length = unit(0.10, "in"),
+                                     type = "closed"),
+                 start_cap = circle(2, 'mm'),  # Reduced from 10 to 2
+                 end_cap = circle(2, 'mm')) +  # Reduced from 10 to 2
+                 
+  geom_node_point(
+    aes(fill = ifelse(name == "Kay", "highlight", "normal"),
+        size = igraph::degree(net, mode = "out")),
+    color = "black", 
+    shape = 21
+  ) +
+  scale_fill_manual(
+    values = c("highlight" = "skyblue", "normal" = "#EFD9D3"),
+    guide = "none"
+  ) +
+  guides(size = "none") +  # This removes the size legend
+  ggnetwork::theme_blank()
+```
+
+```{r}
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21, 
+                  size = V(net)$deg <- igraph::degree(net, mode = "all")) + #node size is now based on degree rather than a number of your choosing
+      scale_fill_manual(
+    values = c("highlight" = "skyblue", "normal" = "#EFD9D3"),
+    guide = "none"
+  ) +
+  ggnetwork::theme_blank()
+
+
+```
+
+
+```{r}
+#### closeness####
+close <- igraph::closeness(net) #closeness
+close #careful with this - isolates can be tricky
+summary(close)
+
+# More info: https://igraph.org/r/doc/closeness.html#:~:text=If%20no%20other%20vertices%20are,calculates%20the%20exact%20closeness%20scores.
+# If there is no (directed) path between vertex v and i, then i is omitted from the calculation. 
+# If no other vertices are reachable from v, then its closeness is returned as NaN
+
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5, 
+                  arrow = grid::arrow(angle = 20,
+                                      length = unit(0.10, "in"),
+                                      type = "closed")) +#, 
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21, 
+                  size = igraph::closeness(net)*15) +
+  ggnetwork::theme_blank()
+
+un_close <- igraph::closeness(un_net) #closeness
+un_close
+summary(un_close) #now there is no missingness
+
+ggraph(un_net) + 
+  geom_edge_link0(color = "black", alpha = .5) + 
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21, 
+                  size = igraph::closeness(un_net)*200) + # mess with number here becuase number is so small!
+  ggnetwork::theme_blank(legend.position = "none")
+```
+
+```{r}
+# in closeness####
+close_in <- igraph::closeness(net, mode = "in") #closeness
+close_in #careful with this - isolates can be tricky
+summary(close_in)
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5, 
+                  arrow = grid::arrow(angle = 20,
+                                      length = unit(0.10, "in"),
+                                      type = "closed")) + 
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21,
+                  size = igraph::closeness(net, mode = "in")*10) +
+  ggnetwork::theme_blank()
+```
+
+
+```{r}
+#### betweenness####
+bet_d <- igraph::betweenness(net)
+summary(bet_d)
+
+bet_dF <- igraph::betweenness(net, directed = F)
+summary(bet_dF)
+#OR
+bet_u <- igraph::betweenness(un_net)
+summary(bet_u)
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5, 
+                  arrow = grid::arrow(angle = 20,
+                                      length = unit(0.10, "in"),
+                                      type = "closed")) +
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21,
+                  size = igraph::betweenness(net)/25) +
+  ggnetwork::theme_blank()
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5) + 
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21,
+                  size = igraph::betweenness(net, directed = F)/50) +
+  ggnetwork::theme_blank()
+
+ggraph(un_net) + 
+  geom_edge_link(color = "black", alpha = .5) + 
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21,
+                  size = igraph::betweenness(un_net)/50) +
+  ggnetwork::theme_blank()
+```
+
+```{r}
+# edge betweenness####
+eb_d <- edge_betweenness(net, directed = T)
+summary(eb_d)
+
+eb_dF <- edge_betweenness(net, directed = F)
+summary(eb_dF)
+#OR
+eb_u <- edge_betweenness(un_net)
+summary(eb_u)
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5, 
+                  arrow = grid::arrow(angle = 20,
+                                      length = unit(0.10, "in"),
+                                      type = "closed"),
+                  aes(width = edge_betweenness(net, directed = T))) +
+  scale_edge_width(range = c(0.15, 2)) +
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21) + 
+  ggnetwork::theme_blank(legend.position = "none") 
+
+ggraph(un_net) + 
+  geom_edge_link(color = "black", alpha = .5, 
+                  aes(width = edge_betweenness(net, directed = F))) +
+  scale_edge_width(range = c(0.15, 2)) +
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21) + 
+  ggnetwork::theme_blank(legend.position = "none") 
+
+```
+```{r}
+# edge betweenness####
+eb_d <- edge_betweenness(net, directed = T)
+summary(eb_d)
+
+eb_dF <- edge_betweenness(net, directed = F)
+summary(eb_dF)
+#OR
+eb_u <- edge_betweenness(un_net)
+summary(eb_u)
+
+# Directed network with Kay highlighted
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5, 
+                  arrow = grid::arrow(angle = 20,
+                                      length = unit(0.10, "in"),
+                                      type = "closed"),
+                  aes(width = edge_betweenness(net, directed = T))) +
+  scale_edge_width(range = c(0.15, 2)) +
+  geom_node_point(
+    aes(fill = ifelse(name == "Kay", "highlight", "normal")),
+    color = "black", 
+    shape = 21,
+    size = 3  # Added fixed size (adjust as needed)
+  ) + 
+  scale_fill_manual(
+    values = c("highlight" = "skyblue", "normal" = "#EFD9D3"),
+    guide = "none"
+  ) +
+  ggnetwork::theme_blank(legend.position = "none") 
+
+# Undirected network with Kay highlighted
+ggraph(un_net) + 
+  geom_edge_link(color = "black", alpha = .5, 
+                  aes(width = edge_betweenness(un_net, directed = F))) +
+  scale_edge_width(range = c(0.15, 2)) +
+  geom_node_point(
+    aes(fill = ifelse(name == "Kay", "highlight", "normal")),
+    color = "black", 
+    shape = 21,
+    size = 3  # Added fixed size (adjust as needed)
+  ) + 
+  scale_fill_manual(
+    values = c("highlight" = "skyblue", "normal" = "#EFD9D3"),
+    guide = "none"
+  ) +
+  ggnetwork::theme_blank(legend.position = "none")
+```
+
+
+```{r}
+#### eigenvector centrality####
+evc_undir <- eigen_centrality(net, directed = F)$vector #must pull the vector
+summary(evc_undir)
+#OR
+evc_undir <- eigen_centrality(un_net)$vector
+summary(evc_undir)
+
+ggraph(un_net) + 
+  geom_edge_link(color = "black", alpha = .5) +
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21, 
+                  size = igraph::eigen_centrality(un_net)$vector*10) +
+  ggnetwork::theme_blank()
+```
+```{r}
+# Calculate eigenvector centrality
+eigen_d <- eigen_centrality(net, directed = TRUE)$vector
+eigen_u <- eigen_centrality(un_net, directed = FALSE)$vector
+
+# See the values
+eigen_d
+summary(eigen_d)
+
+# Visualize (nodes with high eigenvector centrality are larger/darker)
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .3) +
+  geom_node_point(
+    aes(size = eigen_centrality(net)$vector,
+        fill = eigen_centrality(net)$vector),
+    shape = 21,
+    color = "black"
+  ) +
+  scale_size_continuous(range = c(2, 10)) +
+  scale_fill_gradient(low = "#EFD9D3", high = "#82260d") +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "right")
+```
+
+
+```{r}
+#### graph strength####
+gs <- strength(net, mode = "all")
+summary(gs)
+# sum of the weights of edges connected to the node (can also calculate manually)
+
+ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(fill = "#EFD9D3", color = "black",
+                  shape = 21, 
+                  size = strength(net, mode = "all")/5) +
+  ggnetwork::theme_blank()
+```
+
+```{r}
+# in####
+gs_in <- strength(net, mode = "in")
+gs_in
+
+# Create a logical vector for Kay
+is_kay <- V(net)$name == "Kay"
+
+ggraph(net) +
+  geom_edge_link(color = "black", alpha = .5,
+                 arrow = grid::arrow(angle = 20,
+                                     length = unit(0.15, "in"),
+                                     type = "closed"),
+                 start_cap = circle(2, 'mm'),
+                 end_cap = circle(2, 'mm')) +
+  geom_node_point(aes(fill = ifelse(is_kay, "kay", "normal"),
+                      size = strength(net, mode = "in")/3),
+                  color = "black",
+                  shape = 21) +
+  scale_fill_manual(values = c("kay" = "skyblue", "normal" = "#EFD9D3"),
+                    guide = "none") +
+  scale_size_identity() +  # Preserves the exact sizes from strength/2
+  ggnetwork::theme_blank()
+```
+
+
+```{r}
+# in####
+gs_in <- strength(net, mode = "in")
+gs_in
+
+ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(fill = "#EFD9D3", color = "black",
+                  shape = 21, 
+                  size = strength(net, mode = "in")/2) +
+  ggnetwork::theme_blank()
+```
+
+```{r}
+# out####
+gs_out <- strength(net, mode = "out")
+gs_out
+
+ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(fill = "#EFD9D3", color = "black",
+                  shape = 21, 
+                  size = strength(net, mode = "out")/2) +
+  ggnetwork::theme_blank()
+```
+```{r}
+# out####
+gs_out <- strength(net, mode = "out")
+gs_out
+
+# Create a logical vector for Kay
+is_kay <- V(net)$name == "Kay"
+
+ggraph(net) +
+  geom_edge_link(color = "black", alpha = .5,
+                 arrow = grid::arrow(angle = 20,
+                                     length = unit(0.15, "in"),
+                                     type = "closed"),
+                 start_cap = circle(2, 'mm'),
+                 end_cap = circle(2, 'mm')) +
+  geom_node_point(aes(fill = ifelse(is_kay, "kay", "normal"),
+                      size = strength(net, mode = "out")/3),
+                  color = "black",
+                  shape = 21) +
+  scale_fill_manual(values = c("kay" = "skyblue", "normal" = "#EFD9D3"),
+                    guide = "none") +
+  scale_size_identity() +  # Preserves the exact sizes from strength/2
+  ggnetwork::theme_blank()
+```
+```{r}
+gs_out <- strength(net, mode = "out")
+gs_out
+
+# Create a logical vector for Kay
+is_kay <- V(net)$name == "Kay"
+
+ggraph(net) +
+  geom_edge_link(color = "black", alpha = .5,
+                 arrow = grid::arrow(angle = 20,
+                                     length = unit(0.15, "in"),
+                                     type = "closed"),
+                 start_cap = circle(2, 'mm'),
+                 end_cap = circle(2, 'mm')) +
+  geom_node_point(aes(fill = ifelse(is_kay, "kay", "normal"),
+                      size = strength(net, mode = "out")/3),
+                  color = "black",
+                  shape = 21) +
+  scale_fill_manual(values = c("kay" = "skyblue", "normal" = "#EFD9D3"),
+                    guide = "none") +
+  scale_size_identity() +
+  expand_limits(y = c(NA, 5.)) +  # Expands only the top (max y) to 2
+  ggnetwork::theme_blank()
+```
+
+
+```{r}
+#### whole network centrality####
+## centralization####
+# max####
+star_graph <- make_star(100, mode = "undirected")
+
+ggraph(star_graph, layout = "star") + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(fill = "#DFE6EB", 
+                  color = "black", 
+                  size = 10, 
+                  shape = 21) +
+  ggnetwork::theme_blank() 
+
+cent_deg_star <- centr_degree(star_graph, mode = "all")$centralization
+round(cent_deg_star, digits = 2)
+cent_clo_star <- centr_clo(star_graph, mode = "all")$centralization
+round(cent_clo_star, digits = 2)
+cent_bet_star <- centr_betw(star_graph)$centralization
+round(cent_bet_star, digits = 2)
+
+g_mt <- make_empty_graph(100)
+g_mt <- add_edges(g_mt, c(1, 2))
+ggraph(g_mt, layout = "tree") + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(fill = "#DFE6EB", color = "black", size = 10, shape = 21) +
+  ggnetwork::theme_blank() 
+
+cent_evc_iso <- centr_eigen(g_mt)$centralization
+round(cent_evc_iso, digits = 2)
+```
+
+```{r}
+# degree centralization####
+cent_deg <- centr_degree(net, mode = "all")$centralization
+round(cent_deg, digits = 2)
+```
+
+```{r}
+# closeness centralization####
+cent_clo <- centr_clo(net, mode = "all")$centralization
+round(cent_clo, digits = 2)
+```
+
+```{r}
+# betweenness centralization####
+cent_bet <- centr_betw(net)$centralization
+round(cent_bet, digits = 2)
+```
+
+```{r}
+# eigenvector centralization####
+cent_evc <- centr_eigen(net)$centralization
+round(cent_evc, digits = 2)
+```
+
+```{r}
+edges <- as.data.frame(as_edgelist(net))
+names(edges) <- c("from", "to") 
+edges$weight <- E(net)$weight  
+
+nodes <- data.frame(name = V(net)$name)
+
+net <- graph_from_data_frame(edges, directed = T, vertices = nodes)
+
+net
+is_simple(net)
+net_s <- igraph::simplify(net)
+is_simple(net_s)
+net_s_sna <- asNetwork(net_s) #converts igraph to sna object
+
+un_net <- graph_from_data_frame(edges, directed = F, vertices = nodes)
+un_net
+
+net_sna <- network(edges, matrix.type = "edgelist", directed = T) #  ...
+net_sna
+
+un_net_sna <- network(edges, matrix.type = "edgelist", directed = F, multiple = T, vertex.attr = nodes) 
+un_net_sna  
+
+edges$mult <- which_multiple(un_net)
+edges2 <- edges %>% filter(mult != TRUE)
+un_net_sna <- network(edges2, matrix.type = "edgelist", directed = F, vertex.attr = nodes)
+```
+
+```{r}
+#### Dyads####
+igraph::dyad_census(net)
+sna::dyad.census(net_sna)
+
+sna::mutuality(net_sna)
+igraph::reciprocity(net) # what % are mutual?
+igraph::which_mutual(net)
+```
+```{r}
+#### Directed Triad Census####
+# Triad types (cite: Davis & Leinhardt):
+  # 003  A, B, C (empty)
+  # 012  A->B, C
+  # 102  A<->B, C
+  # 021D A<-B->C
+  # 021U A->B<-C
+  # 021C A->B->C
+  # 111D A<->B<-C
+  # 111U A<->B->C
+  # 030T A->B<-C, A->C
+  # 030C A<-B<-C, A->C
+  # 201  A<->B<->C 
+  # 120D A<-B->C, A<->C
+  # 120U A->B<-C, A<->C
+  # 120C A->B->C, A<->C
+  # 210  A->B<->C, A<->C
+  # 300  A<->B<->C, A<->C (complete)
+
+igraph::triad_census(net)
+sna::triad.census(net_sna) #preferred because it has clear labels
+colnames(sna::triad.census(net_sna))[which.max(sna::triad.census(net_sna))] #which triad is the most common?
+colnames(sna::triad.census(net_sna))[which.min(sna::triad.census(net_sna))]
+```
+```{r}
+#### Transitivity####
+# local####
+trans <- igraph::transitivity(net, type = "local", isolates = "zero") # you can pick 0 or missing for isolates
+# can say that isolates are NaN or zero
+summary(trans)
+```
+
+```{r}
+# global####
+trans <- igraph::transitivity(net, type = "global")
+trans
+
+sna::gtrans(net_sna) 
+# the sna package version of transitivity doesn't have an argument for local, so only used for global
+
+# Weak and Weak Census
+  # weak: a->b-> => a->c
+  # weak census: num transitive triads
+  # transitive triads are those where a -> b, b -> c, and a -> c
+gtrans(net_sna, mode='digraph', measure='weak')
+
+# Strong and Strong Census
+  # strong: a->b-> <=> a->c
+  # strong census: num all triads
+gtrans(net_sna, mode='digraph', measure='strong')
+```
+
+```{r}
+# constraint####
+# constraint is higher is ego has more redundant ties
+igraph::constraint(net)
+summary(igraph::constraint(net))
+```
+
+```{r}
+# efficiency####
+global_efficiency(net)
+# Global efficiency is the average of the inverse distances between all pairs of nodes 
+# 0 if pair isn't reachable 
+
+local_efficiency(net)
+# To calcuate local efficienty, remove node and compute the shortest paths between neighbors
+# Take the average of the inverse of the shortest path distances.
+# 0 if node has fewer than two ties or isn't reachable
+
+average_local_efficiency(net)
+# Average local efficiency is the mean of the local efficiencies
+```
+
+```{r}
+#### density####
+den <- igraph::edge_density(net) 
+den
+
+sna::gden(net_sna, mode = 'digraph') #digraph is directed graph, graph is undirected graph
+```
+
+
+```{r}
+# global####
+trans <- igraph::transitivity(net, type = "global")
+trans
+
+sna::gtrans(net_sna) 
+# the sna package version of transitivity doesn't have an argument for local, so only used for global
+
+# Weak and Weak Census
+  # weak: a->b-> => a->c
+  # weak census: num transitive triads
+  # transitive triads are those where a -> b, b -> c, and a -> c
+gtrans(net_sna, mode='digraph', measure='weak')
+
+# Strong and Strong Census
+  # strong: a->b-> <=> a->c
+  # strong census: num all triads
+gtrans(net_sna, mode='digraph', measure='strong')
+```
+
+
+```{r}
+# constraint####
+# constraint is higher is ego has more redundant ties
+igraph::constraint(net)
+summary(igraph::constraint(net))
+```
+
+```{r}
+# efficiency####
+global_efficiency(net)
+# Global efficiency is the average of the inverse distances between all pairs of nodes 
+# 0 if pair isn't reachable 
+
+local_efficiency(net)
+# To calcuate local efficienty, remove node and compute the shortest paths between neighbors
+# Take the average of the inverse of the shortest path distances.
+# 0 if node has fewer than two ties or isn't reachable
+
+average_local_efficiency(net)
+# Average local efficiency is the mean of the local efficiencies
+```
+
+```{r}
+#### density####
+den <- igraph::edge_density(net) 
+den
+
+sna::gden(net_sna, mode = 'digraph') #digraph is directed graph, graph is undirected graph
+```
+
+```{r}
+#### assortativity####
+
+    
+```
+
+```{r}
+## diameter####
+igraph::diameter(net) #longest geodesic
+igraph::diameter(net, directed = F) #longest geodesic for undirected graph
+igraph::diameter(un_net) #longest geodesic for undirected graph
+
+igraph::farthest_vertices(net) #which two nodes are farthest
+igraph::farthest_vertices(net, directed = F)
+
+igraph::get_diameter(net) #which path is longest
+igraph::get_diameter(net, directed = F)
+```
+
+```{r}
+## distance####
+distances(net)[1:10,1:10] #distances between dyads
+mean_distance(net) #average distance for graph
+
+```
+
+```{r}
+# information centrality####
+# In general, actors with higher information centrality are predicted to
+     # have greater control over the flow of information within a network.
+# Highly information-central individuals tend to have a large number of 
+     # short paths to many others within the social structure.
+# In other words, the node is more likely to be hit 
+     # when taking a random walk through the network
+summary(infocent(net_sna))
+summary(infocent(net_sna, rescale = T)) #rescale makes the centralities sum to 1
+```
+
+
+
+
+```{r}
+#### CUG (Conditional Uniform Graph) Tests####
+# CUG tests if graph is more clustered than we expect by chance (w&f, p 543-545)
+  # Note: They can take a while to run.
+
+# We simulate networks of the same size as our network (or density, or dyad census)
+# Compare our network to the simulations
+```
+
+```{r}
+# Test transitivity against density####
+Cug_Edges <- sna::cug.test(net_sna, gtrans, cmode="edges")
+plot(Cug_Edges)
+Cug_Edges$obs.stat #our network
+summary(Cug_Edges$rep.stat) # simulated networks
+# ours is higher than simulations
+```
+
+```{r}
+# Test Transitivity against the Dyad Census####
+Cug_Dyad <- cug.test(net_sna, gtrans, cmode="dyad.census")
+plot(Cug_Dyad)
+Cug_Dyad$obs.stat #our network
+summary(Cug_Dyad$rep.stat) # simulated networks
+# ours is higher than simulations
+```
+
+```{r}
+# Test Transitivity against the size####
+Cug_size <- cug.test(net_sna, gtrans, cmode="size")
+plot(Cug_size)
+Cug_size$obs.stat #our network
+summary(Cug_size$rep.stat) # simulated networks
+# ours is lower than simulations
+```
+
+```{r}
+# conclusion####
+# Conclusion: transitivity is higher than expected given density and dyad census, 
+     # but lower than expected for size
+```
+
+```{r}
+### other functions####
+# function must return a single value for the whole graph
+# functions from sna package, not igraph, to work properly
+
+centralization(net_sna, degree)
+Cug_degcent <- cug.test(net_sna, FUN = function(net_sna) centralization(net_sna, degree), cmode = "edges")
+plot(Cug_degcent)
+Cug_degcent$obs.stat #our network
+summary(Cug_degcent$rep.stat) # simulated networks
+# ours is equivalent to the simulations
+```
+
+```{r}
+centralization(net_sna, betweenness)
+Cug_betcent <- cug.test(net_sna, FUN = function(net_sna) centralization(net_sna, betweenness), cmode = "edges")
+plot(Cug_betcent)
+Cug_betcent$obs.stat #our network
+summary(Cug_betcent$rep.stat) # simulated networks
+# ours is equivalent to the simulations
+```
+
+```{r}
+centralization(net_sna, closeness)
+Cug_clocent <- cug.test(net_sna, FUN = function(net_sna) centralization(net_sna, closeness), cmode = "edges")
+plot(Cug_clocent)
+Cug_clocent$obs.stat #our network
+summary(Cug_clocent$rep.stat) # simulated networks
+# ours is equivalent to the simulations
+```
+
+
+
+```{r}
+gden(net_sna)
+Cug_gden <- cug.test(net_sna, FUN = gden, cmode = "size")
+plot(Cug_gden)
+Cug_gden$obs.stat #our network
+summary(Cug_gden$rep.stat) # simulated networks
+# ours is lower than simulations
+```
+
+```{r}
+components(net_sna)
+Cug_comp <- cug.test(net_sna, FUN = components, cmode = "edges")
+plot(Cug_comp)
+Cug_comp$obs.stat #our network
+summary(Cug_comp$rep.stat) # simulated networks
+# ours is higher than simulations
+```
+
+```{r}
+mean(degree(net_sna))
+Cug_meandeg <- cug.test(net_sna, FUN = function(net_sna) mean(degree(net_sna)), cmode = "size")
+plot(Cug_meandeg)
+Cug_meandeg$obs.stat #our network
+summary(Cug_meandeg$rep.stat) # simulated networks
+# ours is lower than simulations
+```
+
+```{r}
+grecip(net_sna)
+Cug_recip <- cug.test(net_sna, FUN = grecip, cmode = "edges")
+plot(Cug_recip)
+Cug_recip$obs.stat #our network
+summary(Cug_recip$rep.stat) # simulated networks
+# ours is higher than simulations
+```
+
+```{r}
+max(kcores(net_sna))
+Cug_kcore <- cug.test(net_sna, FUN = function(net_sna) max(kcores(net_sna)), cmode = "size")
+plot(Cug_kcore)
+Cug_kcore$obs.stat #our network
+summary(Cug_kcore$rep.stat) # simulated networks
+# ours is lower than simulations
+```
+
+```{r}
+#### components####
+# igraph####
+?igraph::components #look at details
+comp <- igraph::components(net) #default is weak
+comp
+# membership - which component node is part of
+# csize = size of components
+# number of components
+comp_w <- igraph::components(net, mode = "weak")
+comp_w
+comp_s <- igraph::components(net, mode = "strong")
+comp_s
+
+is_connected(net) #weakly connected
+is_connected(net, mode = "strong") # strongly connected
+
+count_components(net) #how many weak clusters
+count_components(net, mode = "strong") #how many strong clusters
+
+max_comp <- which.max(comp_s$csize)
+max_comp #which component is largest
+
+big_comp <- induced_subgraph(net, which(comp_s$membership == max_comp))
+big_comp #keep only the largest connected component of the graph
+
+```
+
+```{r}
+# sna####
+?component.dist
+sna_comp <- sna::component.dist(net_sna) #default is strong
+sna_comp 
+# membership - which component node is part of
+# csize = size of components
+# cdist = distribution of sizes
+sna_comp_s <- sna::component.dist(net_sna, connected = "strong")
+sna_comp_s
+sna_comp_w <- sna::component.dist(net_sna, connected = "weak")
+sna_comp_w
+
+sna::components(net_sna) #how many strong components
+sna::components(net_sna, connected = "strong") #30
+sna::components(net_sna, connected = "weak") #1
+
+```
+
+```{r}
+#### cliques####
+?cliques
+cliques(net) #cliques in the directed graph
+cliques(un_net) #cliques in the undirected graph
+cliques(net, min = 2) #cliques in the directed graph of at least size 3
+cliques(un_net, min = 2) #cliques in the undirected graph of at least size 3
+
+max_cliques(net, min = 2) # max cliques (can't be absorbed into larger clique) of at least size 3
+
+igraph::clique_num(net) # size of largest clique
+igraph::clique_num(un_net)
+```
+
+```{r}
+#### k-core####
+?coreness
+kcore <- igraph::coreness(net)
+kcore #core of each node (at least k degree)
+table(kcore) # cores of network and how many nodes are involved (ex: 6 nodes have core of 5)
+kcore_in <- igraph::coreness(net, mode = "in")
+kcore_in #core of each node (at least k degree)
+table(kcore_in) # cores of network and how many nodes are involved (ex: 6 nodes have core of 5)
+kcore_out <- igraph::coreness(net, mode = "out")
+kcore_out #core of each node (at least k degree)
+table(kcore_out) # cores of network and how many nodes are involved (ex: 6 nodes have core of 5)
+
+?kcores
+kc <- sna::kcores(net_sna)
+kc
+table(kc)
+kc_in <- kcores(net_sna, cmode="indegree") #degree of core calcuated on in ties
+kc_in
+table(kc_in)
+kc_out <- kcores(net_sna, cmode="outdegree") #degree of core calcuated on out ties
+kc_out
+table(kc_out)
+```
+
+```{r}
+#### cutpoints####
+cp <- cutpoints(net_sna, mode = "digraph") #strong cut points in directed graph
+cp
+
+cp_weak <- cutpoints(net_sna, mode = "digraph", connected = "weak")
+cp_weak
+```
+
+```{r}
+
+```
+
+
+```{r}
+#### communities####
+## Fluid clusters####
+?cluster_fluid_communities 
+set.seed(1)
+cfc <- cluster_fluid_communities(un_net, no.of.communities = 4) #need simple, undirected networks
+# specific the number of communities we want to find
+# modularity(cfc) #modularity/partition
+membership(cfc) #which community a node belongs to
+length(cfc) #how many communities
+sizes(cfc) #how many nodes in each community
+```
+
+
+```{r}
+# data manipulation####
+members <- membership(cfc) #pull membership
+cfc_id <- data.frame(cfc_id = as.numeric(members), ego_id = as.numeric(names(members))) #create small dataset
+nodes <- merge(nodes, cfc_id, by = 'ego_id', all = TRUE) #add to nodelist
+```
+
+```{r}
+## Leading Eigenvector####
+?cluster_leading_eigen
+set.seed(1)
+cle <- cluster_leading_eigen(un_net) #for undirected graphs
+modularity(cle) 
+membership(cle) 
+length(cle)
+sizes(cle)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(cle), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(cle))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# data manipulation####
+members <- membership(cle)
+cle_id <- data.frame(cle_id = as.numeric(members), ego_id = as.numeric(names(members)))
+nodes <- merge(nodes, cle_id, by = 'ego_id', all = TRUE)
+```
+
+```{r}
+## Walktrap####
+?cluster_walktrap 
+set.seed(1)
+cwt <- cluster_walktrap(un_net)
+modularity(cwt) 
+membership(cwt) 
+length(cwt)
+sizes(cwt)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(cwt), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(cwt))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# data manipulation####
+members <- membership(cwt)
+cwt_id <- data.frame(cwt_id = as.numeric(members), ego_id = as.numeric(names(members)))
+nodes <- merge(nodes, cwt_id, by = 'ego_id', all = TRUE)
+```
+
+```{r}
+## Spinglass####
+?cluster_spinglass
+#^This function has a gamma parameter that we can tweak!!
+set.seed(1)
+csg <- cluster_spinglass(net)
+modularity(csg) 
+membership(csg) 
+length(csg)
+sizes(csg)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(csg), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# tuning parameters####
+set.seed(1)
+csg_1 <- cluster_spinglass(net, gamma = 1.25)
+length(csg_1)
+csg_2 <- cluster_spinglass(net, gamma = 1.27)
+length(csg_2)
+csg_3 <- cluster_spinglass(net, gamma = 1.3)
+length(csg_3)
+csg_4 <- cluster_spinglass(net, gamma = 1.32)
+length(csg_4)
+csg_5 <- cluster_spinglass(net, gamma = 1.35)
+length(csg_5)
+csg_6 <- cluster_spinglass(net, gamma = 1.37)
+length(csg_6)
+
+colors <- colorpanel(length(csg_1), low = "#efd9d3", high = "#57424a")
+csg_1_plot <- ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_1))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_1))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(csg_2), low = "#efd9d3", high = "#57424a")
+csg_2_plot <- ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_2))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_2))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(csg_3), low = "#efd9d3", high = "#57424a")
+csg_3_plot <- ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_3))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_3))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(csg_4), low = "#efd9d3", high = "#57424a")
+csg_4_plot <- ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_4))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_4))), repel = T) +
+  expand_limits(y = c(NA, 5.)) +  # Expands only the top (max y) to 2
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(csg_5), low = "#efd9d3", high = "#57424a")
+csg_5_plot <- ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_5))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_5))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(csg_6), low = "#efd9d3", high = "#57424a")
+csg_6_plot <- ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_6))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_6))), repel = T) +
+  theme(legend.position = "none")
+
+library(ggpubr)
+ggarrange(csg_1_plot, csg_2_plot, csg_3_plot, csg_4_plot, csg_5_plot, csg_6_plot,
+          nrow = 2, ncol = 3)
+```
+```{r}
+csg_4_plot <- ggraph(net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_4))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_4))), repel = T) +
+  expand_limits(y = c(NA, 5.5)) +  # Expands only the top (max y) to 2
+  theme(legend.position = "none")
+show(csg_4_plot)
+```
+
+
+```{r}
+colors <- colorpanel(length(csg_6), low = "#efd9d3", high = "#57424a")
+csg_6_plot <- ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(csg_5))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(csg_5))), repel = T) +
+  theme(legend.position = "none")
+
+library(ggpubr)
+ggarrange(csg_6_plot)
+```
+
+```{r}
+## Label Propagation Techniques####
+?cluster_label_prop 
+set.seed(1)
+clp <- cluster_label_prop(net)
+modularity(clp) 
+membership(clp) 
+length(clp)
+sizes(clp)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(clp), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clp))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# data manipulation####
+members <- membership(clp)
+clp_id <- data.frame(clp_id = as.numeric(members), ego_id = as.numeric(names(members)))
+nodes <- merge(nodes, clp_id, by = 'ego_id', all = TRUE)
+```
+
+```{r}
+## Optimal community structure####
+?cluster_optimal
+set.seed(1)
+clo <- cluster_optimal(net)
+modularity(clo) 
+membership(clo) 
+length(clo)
+sizes(clo)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(clo), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clo))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# data manipulation####
+members <- membership(clo)
+clo_id <- data.frame(clo_id = as.numeric(members), ego_id = as.numeric(names(members)))
+nodes <- merge(nodes, clo_id, by = 'ego_id', all = TRUE)
+```
+
+```{r}
+## Fast-Greedy Techniques####
+?cluster_fast_greedy 
+set.seed(1)
+cfg <- cluster_fast_greedy(s_un_net) # error! We need to remove duplicated edges from our graph object
+modularity(cfg) 
+membership(cfg) 
+length(cfg)
+sizes(cfg)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(cfg), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(cfg))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# data manipulation####
+members <- membership(cfg)
+cfg_id <- data.frame(cfg_id = as.numeric(members), ego_id = as.numeric(names(members)))
+nodes <- merge(nodes, cfg_id, by = 'ego_id', all = TRUE)
+```
+
+```{r}
+## InfoMAP####
+?cluster_infomap
+set.seed(1)
+cim <- cluster_infomap(net)
+modularity(cim) 
+membership(cim) 
+length(cim)
+sizes(cim)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(cim), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(cim))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# data manipulation####
+members <- membership(cim)
+cim_id <- data.frame(cim_id = as.numeric(members), ego_id = as.numeric(names(members)))
+nodes <- merge(nodes, cim_id, by = 'ego_id', all = TRUE)
+```
+
+```{r}
+## Louvain method####
+?cluster_louvain 
+# has resolution parameter we can tweak!
+set.seed(1)
+clv <- cluster_louvain(un_net)
+modularity(clv) 
+membership(clv) 
+communities(clv)
+length(clv)
+sizes(clv)
+```
+
+```{r}
+# plot####
+colors <- colorpanel(length(clv), low = "#efd9d3", high = "#57424a")
+ggraph(net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv))),
+                  size = igraph::degree(net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none")
+```
+
+```{r}
+# tuning parameters####
+set.seed(1)
+clv_1 <- cluster_louvain(un_net, resolution = 0.7)
+length(clv_1)
+clv_2 <- cluster_louvain(un_net, resolution = 0.8)
+length(clv_2)
+clv_3 <- cluster_louvain(un_net, resolution = 0.9)
+length(clv_3)
+clv_4 <- cluster_louvain(un_net, resolution = 1)
+length(clv_4)
+clv_5 <- cluster_louvain(un_net, resolution = 1.25)
+length(clv_5)
+clv_6 <- cluster_louvain(un_net, resolution = 1.5)
+length(clv_6)
+
+colors <- colorpanel(length(csg_1), low = "#efd9d3", high = "#57424a")
+clv_1_plot <- ggraph(un_net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_1))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_1))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(clv_2), low = "#efd9d3", high = "#57424a")
+clv_2_plot <- ggraph(un_net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_2))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_2))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(clv_3), low = "#efd9d3", high = "#57424a")
+clv_3_plot <- ggraph(un_net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_3))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_3))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(clv_4), low = "#efd9d3", high = "#57424a")
+clv_4_plot <- ggraph(un_net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_4))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_4))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(clv_5), low = "#efd9d3", high = "#57424a")
+clv_5_plot <- ggraph(un_net) +
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_5))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_5))), repel = T) +
+  theme(legend.position = "none")
+
+colors <- colorpanel(length(clv_6), low = "#efd9d3", high = "#57424a")
+clv_6_plot <- ggraph(un_net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_6))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_6))), repel = T) +
+  theme(legend.position = "none")
+
+library(ggpubr)
+ggarrange(clv_1_plot, clv_2_plot, clv_3_plot, clv_4_plot, clv_5_plot, clv_6_plot,
+          nrow = 2, ncol = 3)
+```
+
+```{r}
+colors <- colorpanel(length(clv_6), low = "#efd9d3", high = "#57424a")
+clv_6_plot <- ggraph(un_net) + 
+  geom_edge_link0(color = "black", alpha = .5) +
+  geom_node_point(aes(fill = as.factor(membership(clv_6))),
+                  size = igraph::degree(un_net, mode = "all"), 
+                  color = "black", shape = 21) +
+  scale_fill_manual(values = c(colors)) +
+  ggnetwork::theme_blank() +
+  geom_node_text(aes(label = as.factor(membership(clv_6))), repel = T) +
+  theme(legend.position = "none")
+ggarrange(clv_6_plot)
+```
+
+
+```{r}
+# Load libraries
+library(igraph)
+library(ggraph)
+library(ggpubr)
+library(grDevices)
+
+# Create the network from your data
+raw_data <- read.csv("COCAINE_DEALING.csv", check.names = FALSE)
+row_names <- raw_data[, 1]
+adj_matrix <- as.matrix(raw_data[, -1])
+rownames(adj_matrix) <- row_names
+
+# Create undirected network
+un_net <- graph_from_adjacency_matrix(
+  adj_matrix,
+  mode = "undirected",
+  weighted = TRUE,
+  diag = FALSE
+)
+
+# Check components
+comp <- components(un_net)
+cat("=== Network Components ===\n")
+cat("Number of components:", comp$no, "\n")
+cat("Component sizes:", comp$csize, "\n")
+cat("Nodes in main component:", sum(comp$membership == which.max(comp$csize)), "\n\n")
+
+# METHOD: Use largest component without Kay
+cat("=== Spinglass Clustering with Kay Isolated ===\n\n")
+
+# Get adjacency matrix
+adj_mat <- as.matrix(get.adjacency(un_net, attr = "weight", sparse = FALSE))
+
+# Remove Kay
+nodes_without_kay <- rownames(adj_mat)[rownames(adj_mat) != "Kay"]
+adj_mat_no_kay <- adj_mat[nodes_without_kay, nodes_without_kay]
+
+# Create network without Kay
+net_no_kay <- graph_from_adjacency_matrix(
+  adj_mat_no_kay,
+  mode = "undirected",
+  weighted = TRUE,
+  diag = FALSE
+)
+
+# Check components of network without Kay
+comp_no_kay <- components(net_no_kay)
+cat("Network without Kay:\n")
+cat("  Number of components:", comp_no_kay$no, "\n")
+cat("  Component sizes:", comp_no_kay$csize, "\n")
+
+# Get the largest component
+largest_component <- which.max(comp_no_kay$csize)
+nodes_in_largest <- V(net_no_kay)[comp_no_kay$membership == largest_component]
+net_main <- induced_subgraph(net_no_kay, nodes_in_largest)
+
+cat("  Using largest component with", vcount(net_main), "nodes\n\n")
+
+# Try different gamma values on the MAIN COMPONENT
+gamma_values <- c(0.5, 0.7, 0.9, 1.0, 1.2, 1.5)
+results <- list()
+
+for(i in seq_along(gamma_values)) {
+  gamma <- gamma_values[i]
+  set.seed(42)
+  
+  # Run spinglass on main component
+  csg <- cluster_spinglass(net_main, gamma = gamma, weights = E(net_main)$weight)
+  
+  # Create membership vector for ALL original nodes
+  full_membership <- setNames(rep(NA, vcount(un_net)), V(un_net)$name)
+  
+  # Assign cluster numbers to nodes in main component
+  main_nodes <- V(net_main)$name
+  full_membership[main_nodes] <- membership(csg)
+  
+  # Assign nodes in other components to their own clusters
+  other_components <- setdiff(1:comp_no_kay$no, largest_component)
+  next_cluster <- max(full_membership, na.rm = TRUE) + 1
+  
+  for(comp_id in other_components) {
+    comp_nodes <- V(net_no_kay)[comp_no_kay$membership == comp_id]$name
+    full_membership[comp_nodes] <- next_cluster
+    next_cluster <- next_cluster + 1
+  }
+  
+  # Assign Kay to her own cluster
+  full_membership["Kay"] <- next_cluster
+  
+  # Create custom community object
+  final_clusters <- make_clusters(un_net, membership = full_membership)
+  
+  # Store results
+  results[[i]] <- list(
+    gamma = gamma,
+    clusters = final_clusters,
+    n_communities = length(unique(na.omit(full_membership))),
+    modularity = modularity(final_clusters),
+    kay_cluster = full_membership["Kay"]
+  )
+  
+  cat(sprintf("Gamma = %.1f: %d communities, Modularity = %.3f, Kay in cluster %d\n", 
+              gamma, results[[i]]$n_communities, results[[i]]$modularity, 
+              results[[i]]$kay_cluster))
+}
+
+# Find best gamma
+best_idx <- which.max(sapply(results, function(x) x$modularity))
+best_result <- results[[best_idx]]
+cat(sprintf("\nBest gamma: %.1f (modularity = %.3f)\n", 
+            best_result$gamma, best_result$modularity))
+
+# Show cluster composition
+best_clusters <- best_result$clusters
+membership_vec <- membership(best_clusters)
+
+cat("\nCluster composition:\n")
+for(clust in sort(unique(membership_vec))) {
+  nodes_in_clust <- names(membership_vec[membership_vec == clust])
+  if("Kay" %in% nodes_in_clust) {
+    cat(sprintf("  Cluster %d (Kay's cluster): %s\n", clust, paste(nodes_in_clust, collapse=", ")))
+  } else {
+    cat(sprintf("  Cluster %d (%d nodes): %s\n", 
+                clust, 
+                length(nodes_in_clust),
+                paste(nodes_in_clust[1:min(5, length(nodes_in_clust))], collapse=", ")))
+  }
+}
+
+# Visualize
+n_comm <- length(unique(membership_vec))
+
+# Create color palette - make Kay's cluster skyblue
+if(n_comm > 1) {
+  colors <- colorpanel(n_comm - 1, low = "#efd9d3", high = "#57424a")
+  all_colors <- c(colors, "skyblue")
+} else {
+  all_colors <- c("skyblue")
+}
+names(all_colors) <- sort(unique(membership_vec))
+
+# Plot
+ggraph(un_net, layout = "stress") +
+  geom_edge_link0(color = "gray70", alpha = 0.2) +
+  geom_node_point(
+    aes(fill = as.factor(membership(best_clusters)),
+        size = igraph::degree(un_net)),
+    color = "black", 
+    shape = 21
+  ) +
+  scale_fill_manual(values = all_colors) +
+  geom_node_text(
+    aes(label = ifelse(name == "Kay", "KAY", 
+                       ifelse(igraph::degree(un_net) > 3 & 
+                                !is.na(membership(best_clusters)) & 
+                                membership(best_clusters) != best_result$kay_cluster, 
+                              name, ""))),
+    repel = TRUE,
+    size = ifelse(V(un_net)$name == "Kay", 5, 3),
+    fontface = ifelse(V(un_net)$name == "Kay", "bold", "plain"),
+    color = "black"
+  ) +
+  scale_size_continuous(range = c(2, 10)) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none") +
+  labs(title = paste("Drug Dealer Network - Kay Isolated (γ =", best_result$gamma, ")"),
+       subtitle = paste("Kay (skyblue) alone |", n_comm, "total communities | Modularity =", 
+                        round(best_result$modularity, 3)))
+```
+
+```{r}
+# Assuming you already have:
+# - un_net (your network)
+# - best_clusters (the community object with Kay isolated)
+
+# Create color palette
+n_comm <- length(unique(membership(best_clusters)))
+colors <- colorpanel(n_comm, low = "#efd9d3", high = "#57424a")
+
+# Make Kay's cluster skyblue
+kay_cluster <- membership(best_clusters)["Kay"]
+colors[kay_cluster] <- "skyblue"
+
+# Create hierarchical layout plot
+csg_kay_hierarchical <- ggraph(un_net, layout = "dendrogram", circular = FALSE) +
+  geom_edge_diagonal(color = "black", alpha = 0.3) +
+  geom_node_point(aes(fill = as.factor(membership(best_clusters))),
+                  size = 4, 
+                  color = "black", 
+                  shape = 21) +
+  scale_fill_manual(values = colors) +
+  geom_node_text(aes(label = as.factor(membership(best_clusters))),
+                 repel = FALSE,
+                 size = 3,
+                 nudge_y = 0.1) +
+  ggnetwork::theme_blank() +
+  theme(legend.position = "none",
+        plot.margin = margin(1, 1, 1, 1, "cm"))
+
+# Display
+csg_kay_hierarchical
+```
+
+
+```{r}
+#### Compare Partitions####
+modularities <- c(
+            eigen = modularity(cle),
+            walk = modularity(cwt),
+            spinglass = modularity(csg_1),
+            label = modularity(clp),
+            optimal = modularity(clo),
+            fastgreed = modularity(cfg),
+            infomap = modularity(cim),
+            louvain = modularity(clv))
+modularities # optimal has highest modularity
+which.max(modularities) # optimal has highest modularity
+
+# Other measures
+vi <- compare(cle, cwt, method = "vi") 
+vi
+# "variation of information" tells you about the theoretical distance between communities. Basically, what it would take (a lot, nothing) to turn one community assignment into another. 
+# Range of values: 0-ln(n) (0 is identical, higher is more different)
+nmi <- compare(cle, cwt, method = "nmi") 
+nmi
+# "normalized mutual information" (older measure) is a test similarity between partitions based on shared info. 
+# Range of values: 0-1 (0 is independent, 1 is identical). It does not correct for chance agreement.
+# It can be artificially high if you have a lot of tiny communities.
+sj <- compare(cle, cwt, method = "split.join") 
+sj
+# "split join" is a measure of how much tweaking of the network (splitting/merging communities) it would take to chance one partition into another. 
+# Range of values: 0-inf (0 is identical, higher values mean more changes are needed). 
+ar <- compare(cle, cwt, method = "adjusted.rand") 
+ar
+# "adjusted rand" is a pairwise comparison of whether 2 nodes should be in the same community. 
+# Range of values: -1 to 1 (0 is chance, 1 is identical, -1 is worse than random). It does correct for chance agreement.
+
+library(aricode)
+m_cle <- igraph::membership(cle)
+m_cwt <- igraph::membership(cwt)
+m_cle <- as.integer(unlist(m_cle, use.names = FALSE))
+m_cwt <- as.integer(unlist(m_cwt, use.names = FALSE))
+ami <- AMI(m_cle, m_cwt) 
+ami
+# "adjusted mutual information" tests how much two partitions share. It is robust to different numbers of communities.  
+# Range of values: 0-1. (0 is chance overlap, 1 is identical). It does correct for chance agreement. 
+```
+
+```{r}
+#### Add self-loops####
+# make sure you have a weight column (might not work properly if you don't), 
+# and you may want to reduce your data to just ego, alter, and weight (in that order)
+# may need to rename third column to "weight" depending on which version of R/packages you're using
+modularity(cluster_fast_greedy(s_un_net)) # mod = 0.68
+igraph::any_loop(s_un_net) #no loops
+which_loop(s_un_net) # there are none
+v1 <- get.data.frame(s_un_net, what = "vertices") #extract the node data from the object
+summary(v1)
+e1 <- get.data.frame(s_un_net, what = "edges")  #extract the edge data from the object
+summary(e1) #we have a weight column. Good. 
+length(cluster_fast_greedy(s_un_net)) # 8 clusters at baseline
+
+s_un_net[from=V(s_un_net), to=V(s_un_net)] <- 5 #add weights of 5 to self-loops
+modularity(cluster_fast_greedy(s_un_net)) # mod = 0.75
+igraph::any_loop(s_un_net) # now there are loops
+which_loop(s_un_net) #these ones
+v2 <- get.data.frame(s_un_net, what = "vertices")
+summary(v2)
+e2 <- get.data.frame(s_un_net, what = "edges")
+summary(e2) #there are 63 more edges (as there should be, because there are 63 nodes in the data)
+length(cluster_fast_greedy(s_un_net)) # now 9
+
+s_un_net[from=V(s_un_net), to=V(s_un_net)] <- 10 #add heavier self-loops
+modularity(cluster_fast_greedy(s_un_net)) # mod = 0.79; getting higher with heavier weights
+igraph::any_loop(s_un_net)
+which_loop(s_un_net)
+v3 <- get.data.frame(s_un_net, what = "vertices")
+summary(v3)
+e3 <- get.data.frame(s_un_net, what = "edges")
+summary(e3) #now the weights for the self-loops are 10
+length(cluster_fast_greedy(s_un_net)) # now 11
+
+```
+
+```{r}
+#### packages####
+library(lme4)
+library(lmerTest)
+library(gplots)
+library(dplyr)
+library(igraph)
+```
+
+```{r}
+## variables####
+# contextual effect
+edges3 <- edges3 %>%
+  group_by(ego_id) %>%
+  dplyr::mutate(net_age = mean(age_alter)) #calculate the contextual effect
+summary(edges3)
+
+# network descriptive
+nodes$deg <- igraph::degree(net, mode = "all") #calculate network descriptive
+nodes$deg
+
+names(nodes)
+names(edges3)
+edges4 <- merge(nodes, edges3, by = "ego_id") #merge again to add degree
+```
+
+```{r}
+#### Egocentric Analysis####
+summary(edges4)
+```
+
+```{r}
+### 1. Random intercept model with covariates####
+#model1 <- lm(weight ~ age_ego + gender_ego + 
+          #       age_alter + gender_alter, # + (1 | ego_id), # code between parentheses are the random effects
+          #     data = edges4, #REML = T, 
+          #     na.action = na.omit)
+#summary(model1)
+
+model1 <- lmer(weight ~ age_ego + gender_ego + 
+                 age_alter + gender_alter + (1 | ego_id), # code between parentheses are the random effects
+               data = edges4, REML = T, 
+               na.action = na.omit)
+summary(model1)
+# Reduction in tie closeness for older alters and male alters (ignoring significance)
+# Increase in tie closeness for older egos and male egos (ignoring significance)
+```
+
+
+
+```{r}
+## Intraclass correlation####
+# ICC is the level-2 variance divided by the total variance
+# this variance comes from the random effects (at the top of the mlm output)
+
+0.2417/(0.2417 + 1.1642) 
+# it's fairly low (range is 0 to 1), which indicates that there is a lot of variation around the level-2 observation
+
+library(performance)
+performance::icc(model1) # you can also have it calculated automatically
+# the conditional ICC also accounts for the fixed effects (adjusted is just random effects), 
+# but you don't have to worry about that. Adjusted ICC is (usually) enough
+```
+
+```{r}
+### 2. Random intercept model with contextual effect####
+model2 <- lmer(weight ~ age_ego + gender_ego + 
+                 age_alter + gender_alter + 
+                 net_age + (1 | ego_id),
+               data = edges4, REML = T, 
+               na.action = na.omit)
+summary(model2)
+# as the ego's network gets older, their relationships get closer (ignoring significance)
+```
+
+```{r}
+## Intraclass correlation####
+performance::icc(model2) # still pretty small; lots of variation around ego
+```
+
+```{r}
+### 3. Random coefficient model####
+model3 <- lmer(weight ~ age_ego + gender_ego + 
+                 age_alter + gender_alter + 
+                 net_age + (age_alter | ego_id), # alter_age (level-1 variable) is random slope
+               data = edges4, REML = T,
+               na.action = na.omit) #this is hard to fit on data this small
+summary(model3) 
+# warning that there is a singular fit
+# singular fits can be from over fitting / random effects being near zero or correlations being ~1
+# this is probably due to this data being unable to support random effects that are this complex
+```
+
+```{r}
+compare_optimizers <- allFit(model3) # it's possible that this it's a false positive, so you can check
+# comparing different model optimizers can be informative
+summary(compare_optimizers)$llik # these are all basically the same, which is a good sign
+summary(compare_optimizers)$fixef # optimx.L-BFGS-B (and a little bit nloptwrap.NLOPT_LN_BOBYQA) are different
+
+# # https://joshua-nugent.github.io/allFit/
+# optimx_options <- c("L-BFGS-B", "nlminb", "nlm", "bobyqa", "nmkb", "hjkb")
+# for(i in 1:length(optimx_options)){
+#   print(paste0("Testing optimx: ", optimx_options[i]))
+#   tryCatch({
+#     model_flex <- lmer(weight ~ age_ego + gender_ego + age_alter + gender_alter +
+#                          net_age + (age_alter | ego_id),
+#                        data = edges4, REML = T,
+#                        na.action=na.omit,
+#                        control = lmerControl(optimizer = "optimx",
+#                                              optCtrl = list(method = optimx_options[i],
+#                                                             maxit = 1e9)))
+#     if(is.null(model_flex@optinfo$conv$lme4$messages)){
+#       print(paste0("One of the optimx options, ", optimx_options[i], ", worked!"))
+#       print(model_flex)
+#       break
+#       } else {
+#         print(paste0("Convergence issue with optimx option: ", optimx_options[i]))
+#         }
+#     }, error = function(e) {
+#       print(paste0("Error occurred with optimx option: ", optimx_options[i], ": ", e$message))
+#       })
+#   } # another option
+
+# scaling and centering can also help with some kinds of model fit issues
+table(edges4$age_ego)
+table(edges4$age_alter)
+table(edges4$net_age)
+
+edges4$age_ego_scale <- scale(edges4$age_ego, center = T, scale = T) #center subtracts the mean, scale divides by the standard deviation
+edges4$age_alter_scale <- scale(edges4$age_alter, center = T, scale = T) #center subtracts the mean, scale divides by the standard deviation
+edges4$net_age_scale <- scale(edges4$net_age, center = T, scale = T) #center subtracts the mean, scale divides by the standard deviation
+```
+
+```{r}
+# Choose one of the good optimizers and run again
+model3b <- lmer(weight ~ age_ego + gender_ego + 
+                 age_alter + gender_alter + 
+                 net_age + (age_alter | ego_id), 
+               data = edges4, REML = T,
+               control = lmerControl(optimizer = "bobyqa"),
+               na.action = na.omit)
+summary(model3b) # similar to model 3 and has a warning
+mods <- list(model3, model3b)
+sjPlot::tab_model(mods) #to make a pretty table; can further adjust this to make it look better
+```
+
+```{r}
+## Intraclass correlation####
+performance::icc(model3b) # because of the singularity warning, default doesn't work
+performance::icc(model3b, tolerance = 0) #setting the tolerance to 0 makes the test less strict, which allows it to run
+# ^ pretty small; lots of variation
+```
+
+```{r}
+### 4. cross-level interaction####
+model4 <- lmer(weight ~ age_ego*net_age + gender_ego + # multiply variables to interact
+                 age_alter*net_age + gender_alter + 
+                 net_age + (age_alter | ego_id),
+               data = edges4, REML = T,
+               control = lmerControl(optimizer = "bobyqa"),
+na.action = na.omit) #this is hard to fit on this data
+summary(model4) 
+# convergence warning
+# no significant interactions
+m4Fit <- allFit(model4)
+m4Fit
+summary(m4Fit)$llik #pretty close to the same
+summary(m4Fit)$fixef #nmkbw, optimx.L-BFGS-B, and nloptwrap.NLOPT_LN_BOBYQA are somewhat different
+
+# model4b <- lmer(weight ~ age_ego*net_age + gender_ego + 
+#                  age_alter*net_age + gender_alter + 
+#                  net_age + (age_alter | ego_id),
+#                data = edges4, REML = T,
+#                control=lmerControl(optimizer = "bobyqa", 
+#                                    check.conv.singular = .makeCC(action = "message",  
+#                                                                  tol = 1e-4)),
+#                na.action = na.omit)
+# summary(model4b) # still have issues with convergence, but I'm ignoring them by hiding the message
+# # no significant interactions
+```
+
+```{r}
+library(sjPlot) # I prefer to visualize interactions, and this package helps
+sjPlot::plot_model(model4, type = "pred", terms = c("net_age", "age_alter"))
+sjPlot::plot_model(model4, type = "pred", terms = c("net_age", "age_ego"))
+# ^ these visualizations show that the interactions aren't significant; lots of overlap
+```
+
+```{r}
+## Intraclass correlation####
+performance::icc(model4, tolerance = 0) #pretty small
+```
+
+```{r}
+### 5. Add network descriptives####
+model5 <- lmer(weight ~ age_ego*net_age + gender_ego + 
+                  age_alter*net_age + gender_alter + 
+                  net_age + deg +
+                  (age_alter | ego_id),
+                data = edges4, REML = T,
+               control = lmerControl(optimizer = "bobyqa"),
+                na.action = na.omit)
+summary(model5) # still have issues with convergence
+# As degree increases, relationship strength gets weaker
+
+# model5 <- lmer(weight ~ age_ego*net_age + gender_ego + 
+#                   age_alter*net_age + gender_alter + 
+#                   net_age + deg +
+#                   (age_alter | ego_id),
+#                 data = edges4, REML = T,
+#                 control=lmerControl(optimizer = "bobyqa", 
+#                                     check.conv.singular = .makeCC(action = "ignore",  
+#                                                                   tol = 1e-4)),
+#                 na.action = na.omit)
+# summary(model5) # still have issues with convergence, but I'm ignoring them
+# As degree increases, relationship strength gets weaker
+
+```
+
+```{r}
+## Intraclass correlation####
+performance::icc(model5, tolerance = 0) # pretty small
+```
+
+```{r}
+### anova####
+# We can to compare our model fits
+anova(model5, model4) # p-value < 0.05; a significant improvement in model fit in 5 vs 4!
+anova(model5, model3b) # p-value > 0.05; not a significant improvement in model fit 5 vs 3
+anova(model5, model2) # p-value > 0.05; not a significant improvement in model fit 5 vs 2
+anova(model5, model1) # p-value > 0.05; not a significant improvement in model fit 5 vs 1
+anova(model4, model3b) # p-value > 0.05; not a significant improvement in model fit 4 vs 3
+anova(model4, model2) # p-value > 0.05; not a significant improvement in model fit 4 vs 2
+anova(model4, model1) # p-value > 0.05; not a significant improvement in model fit 4 vs 1
+anova(model3b, model2) # p-value > 0.05; not a significant improvement in model fit 3 vs 2
+anova(model3b, model1) # p-value > 0.05; not a significant improvement in model fit 3 vs 1
+anova(model2, model1) # p-value > 0.05; not a significant improvement in model fit 1 vs 2
+
+# Based on these results, model 5 seems like the best fit
+mods <- list(model5, model4, model3b, model2, model1)
+sjPlot::tab_model(mods) #can further adjust this to make it look better
+```
+
+```{r}
+model1 <- ergm(net_sna ~ edges)
+summary(model1)
+```
+
+```{r}
+mod_sum <- summary(model1) #save summary as an object
+mod_sum
+beta <- coef(mod_sum)[1] #extract the estimate
+beta <- mod_sum$coefficients[1] #this also works
+beta #this is the coefficient for the edges term
+
+prob <- exp(beta)/(1+exp(beta)) #calculate the probability of forming a tie
+prob # the probability of forming a tie with someone else at random is 4.5%
+
+plogis(mod_sum$coefficients[1]) # if you don't want to calculate the probability manually, you can also use the plogis command
+plogis(beta) #this also works, based on the object created above
+plogis(coef(model1)[['edges']]) # alternatively, you can extra the coefficient from the model this way and get the probability
+
+gden(net_sna)
+```
+```{r}
+gof.model1_btergm <- btergm::gof(model1, nsim = 100, # checking goodness of fit of model estimates against 100 simulated networks
+                                   statistics = c(esp, deg, odeg, ideg, geodesic, 
+                                                  triad.directed, fastgreedy.modularity)) #picked these statistics
+gof.model1_btergm # extract tables. For those with p-values, the closer to 1 the better the fit
+# Edge-wise shared partners - how many alters do two tied nodes have in common
+# Degree - number of ties
+# Outdegree - number of outgoing ties *0 fits poorly
+# Indegree - number of incoming ties
+# Geodesic distances - shortest distance through graph *3, 4, inf fit poorly
+# Triad Directed - triad census for directed graph
+# Fast-Greedy Modularity - community detection modularity for Fast-Greedy
+
+gof.model1_btergm$Degree$stats #can look at one measure alone
+
+plot(gof.model1_btergm)
+```
+```{r}
+net <- igraph::graph_from_data_frame(edges, directed = F, vertices = nodes)
+net
+```
+
+```{r}
+param <- param.dcm(inf.prob = 0.5, act.rate = 0.5) 
+# inf.prob = prob of infection, act.rate = avg. num. transmissible acts per person per unit time
+init <- init.dcm(s.num = 28, i.num = 1)
+# s.num = num initally susceptible, i.num = num initial infection
+control <- control.dcm(type = "SI", nsteps = 40)
+```
+
+```{r}
+si_mod <- dcm(param, init, control)
+
+# If we look at the model object we can see some of the basic details about our choices. 
+
+si_mod
+```
+```{r}
+plot(si_mod)
+```
+
+```{r}
+si_mod_df <- as.data.frame(si_mod)
+```
+
+```{r}
+plot(si_mod)
+plot(si_mod, y = "s.num")
+plot(si_mod, y = "i.num")
+plot(si_mod, y = "si.flow")
+```
+
+```{r}
+ggplot(si_mod_df) + 
+  geom_line(aes(x = time, y = s.num), colour="#1A1A1A", size = 1, linetype = "solid") +
+  geom_line(aes(x = time, y = i.num), colour="#4A4A4A", size = 1, linetype = "dashed") +
+  geom_line(aes(x = time, y = si.flow), colour="#8A8A8A", size = 1, linetype = "dotted") +
+  scale_x_continuous(limits = c(0,40), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,30), expand = c(0, 0)) +
+  xlab("Time") + 
+  ylab("Dynamics") +
+  theme_classic(base_size = 12)
+```
+
+```{r}
+param <- param.dcm(inf.prob = 0.2, act.rate = 0.25, rec.rate = 0.02)
+init <- init.dcm(s.num = 63, i.num = 1)
+control <- control.dcm(type = "SIS", nsteps = 50)
+sis_mod <- dcm(param, init, control)
+
+sis_mod
+
+```
+```{r}
+param <- param.dcm(inf.prob = 0.2, act.rate = 0.25, rec.rate = 0.02)
+init <- init.dcm(s.num = 28, i.num = 1)
+control <- control.dcm(type = "SIS", nsteps = 40)
+sis_mod <- dcm(param, init, control)
+
+sis_mod
+```
+
+```{r}
+# We can look at the model details by opening the details of the model into a dataframe. 
+# With this, we can see each of the variables at each point in time. 
+sis_mod_df <- as.data.frame(sis_mod)
+# head(sis_mod_df) #this creates a VERY long list, so I'm not printing it
+```
+
+```{r}
+# We can also plot each of these variables (which I prefer)
+plot(sis_mod)
+plot(sis_mod, y = "si.flow")
+plot(sis_mod, y = "is.flow")
+plot(sis_mod, y = "s.num")
+plot(sis_mod, y = "i.num")
+```
+
+```{r}
+# As I prefer ggplot aesthetics, I used the dataframe I made above for plotting. 
+# And this way I can easily see each of the variables on the same plot.
+# sis_mod_df #this creates a VERY long list, so I'm not printing it
+colorpanel(4, low = "#EFD9D3", high = "#57424A")
+ggplot(sis_mod_df) + 
+  geom_line(aes(x = time, y = s.num), colour="#EFD9D3") +
+  geom_line(aes(x = time, y = i.num), colour="#BCA7A5") +
+  geom_line(aes(x = time, y = si.flow), colour="#8A7478") + 
+  geom_line(aes(x = time, y = is.flow), colour="#57424A") +
+  scale_x_continuous(limits = c(0,50), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,100), expand = c(0, 0)) +
+  xlab("Time") + ylab("Dynamics") +
+  theme_classic()
+```
+
+```{r}
+# Though, because the transition states are on a much different scale, it might be 
+# worthwhile to make two plots - one for SI compartments, and one for transitions.
+sis_p2 <- ggplot(sis_mod_df) + 
+  geom_line(aes(x = time, y = s.num), colour="#EFD9D3") +
+  geom_line(aes(x = time, y = i.num), colour="#BCA7A5") +
+  scale_x_continuous(limits = c(0,50), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,50), expand = c(0, 0)) +
+  xlab("Time") + ylab("Dynamics") +
+  theme_classic()
+sis_p3 <- ggplot(sis_mod_df) + 
+  geom_line(aes(x = time, y = si.flow), colour="#8A7478") +
+  geom_line(aes(x = time, y = is.flow), colour="#57424A") +
+  scale_x_continuous(limits = c(0,50), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,1), expand = c(0, 0)) +
+  xlab("Time") + ylab("Dynamics") +
+  theme_classic()
+ggarrange(sis_p2, sis_p3 + rremove("y.title"), ncol = 2)
+# because both plots have the same y axis title, we can remove it from the second plot
+```
+
+```{r}
+# In addition, to find the details of the model specific to a moment in time by using the
+# summary function, like this:
+summary(sis_mod, at = 25)
+```
+
+## SIR Model####
+The last model type we'll discuss is the SIR model. Differently from the SIS model, 
+this model has a third compartment for those who have RECOVERED from the infection.
+
+```{r}
+# To build the SIR model, we need to change two pieces of information. 
+# We need to set the type to SIR in the control.dcm function. 
+# We also need the r.num argument in the init.dcm function to represent the number 
+# of people who are initially recovered for the infection. (Ordinarily this is 0.)
+# Last, we need to set the rec.rate in the param.dcm function. 
+# rec.rate determines the mean recovery rate for the SIR model. 
+param <- param.dcm(inf.prob = 1/5, act.rate = 1, rec.rate = 1/20)
+init <- init.dcm(s.num = 28, i.num = 1, r.num = 0)
+control <- control.dcm(type = "SIR", nsteps = 50)
+sir_mod <- dcm(param, init, control)
+```
+
+```{r}
+# Like the prior models, we can examine the object and then plot the results. 
+sir_mod_df <- as.data.frame(sir_mod)
+# head(sir_mod_df) #this creates a VERY long list, so I'm not printing it
+```
+
+```{r}
+# The sir model object has new variables to account for: r.num and ir.flow
+# r.num is the number of recovered individuals
+# ir.flow is the number of individuals transitioning from infected to recovered
+
+plot(sir_mod, y = c("s.num", "i.num", "r.num", "si.flow", "ir.flow"))
+```
+
+```{r}
+# As I prefer ggplot aesthetics, I used the dataframe I made above for plotting. 
+# And this way I can easily see each of the variables all on the same plot.
+colorpanel(5, low = "#EFD9D3", high = "#57424A")
+ggplot(sir_mod_df) + 
+  geom_line(aes(x = time, y = s.num), colour="#EFD9D3") +
+  geom_line(aes(x = time, y = i.num), colour="#C9B3B1") + 
+  geom_line(aes(x = time, y = r.num), colour="#A38E8F") + 
+  geom_line(aes(x = time, y = si.flow), colour="#7D686C") +
+  geom_line(aes(x = time, y = ir.flow), colour="#57424A") +
+  scale_x_continuous(limits = c(0,50), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,100), expand = c(0, 0)) +
+  xlab("Time") + ylab("Dynamics") +
+  theme_classic()
+```
+
+```{r}
+# Though, because the transition states are on a much different scale, it might be 
+# worthwhile to make two plots - one for SI compartments, and one for transitions.
+sir_p2 <- ggplot(sir_mod_df) + 
+  geom_line(aes(x = time, y = s.num), colour="#EFD9D3") + #lightest
+  geom_line(aes(x = time, y = i.num), colour="#C9B3B1") + #medium
+  geom_line(aes(x = time, y = r.num), colour="#A38E8F") + #medium
+  scale_x_continuous(limits = c(0,50), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,100), expand = c(0, 0)) +
+  xlab("Time") + ylab("Dynamics") +
+  theme_classic()
+sir_p3 <- ggplot(sir_mod_df) + 
+  geom_line(aes(x = time, y = si.flow), colour="#7D686C") + #dark
+  geom_line(aes(x = time, y = ir.flow), colour="#57424A") + #dark
+  scale_x_continuous(limits = c(0,50), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0,2.5), expand = c(0, 0)) +
+  xlab("Time") + ylab("Dynamics") +
+  theme_classic()
+ggarrange(sir_p2, sir_p3 + rremove("y.title"), ncol = 2)
+# because both plots have the same y axis title, we can remove it from the second plot
+```
+
+```{r}
+# In addition to find the details of the model specific to a moment in time by using the
+# summary function, like this:
+summary(sir_mod, at = 10)
+```
+
+```{r}
+# We can plot that information using the comp_plot function. 
+# This function allows us to see a flow chart of what our model is doing. 
+comp_plot(sir_mod, at = 10)
+# To make the plot cleaner, we can set the number of digits for the plot like this:
+comp_plot(sir_mod, at = 10, digits = 0)
+```
+
+# igraph SIR Model####
+If you want to plot the SIR model over an observed graph, 
+I think the most straightforward way to do that is the use the SIR function in igraph. 
+
+```{r}
+# I'm using the illustrative network I've been using throughout the term. 
+
+# One snafu with the igraph function is that it requires the graph to be "simple". 
+# Simplified graphs do not have any loops or multiplex ties. 
+is_simple(net) 
+# Our graph is NOT simple, so we need to make it so. 
+net <- igraph::simplify(net)
+is_simple(net) 
+
+# The arguments in the igraph sir function are different than those in the EpiModel package.
+# Here, we set the rate of infection with the beta argument, and the rate of recovery is set by gamma.
+```
+
+```{r}
+# (More specifically, per the igraph documentation, beta is:
+# "The rate of infection of an individual 
+# that is susceptible and has a single infected neighbor. 
+# The infection rate of a susceptible individual with n infected neighbors is n times beta. 
+# Formally this is the rate parameter of an exponential distribution."
+
+# And gamma is: "The rate of recovery of an infected individual. 
+# Formally, this is the rate parameter of an exponential distribution.")
+
+set.seed(2)
+sm50 <- sir(graph = net, beta = 5, gamma = 2) 
+class(sm50)
+# The object you get is not a dataframe, but an sir object. 
+# So we need to use some tricks to take a look at it.
+# The simplest approach is to use indexing. 
+# head(sm50) #whole object,  #this creates a VERY long list, so I'm not printing it
+sm50[[1]] #the first simulation
+sm50[[1]]$times #times of events
+sm50[[1]]$NS #number susceptible
+sm50[[1]]$NI #number infected
+sm50[[1]]$NR #number recovered
+# plot(sm50) #plotting all simulations at once, default measure (NI)
+par(mfrow = c(1, 3))
+plot(sm50, comp = "NS") #plotting all simulations at once, for susceptible
+plot(sm50, comp = "NI") #plotting all simulations at once, for infected (default)
+plot(sm50, comp = "NR") #plotting all simulations at once, for recovered
+
+plot(sm50, comp = "NS", xlim = c(0, 5), ylim = c(0, 75)) #set axes to better compare plots
+plot(sm50, comp = "NI", xlim = c(0, 5), ylim = c(0, 75)) #set axes to better compare plots
+plot(sm50, comp = "NR", xlim = c(0, 5), ylim = c(0, 75)) #set axes to better compare plots
+```
+
+```{r}
+# (There may be a better way to do this, but this is what I came up with.) 
+# Because I like to plot in ggplot, I needed to manipulate the list into a dataframe. 
+# I only wanted to look at the first simulation, so first I created an object of just sim1. 
+sm50_sim1 <- sm50[[1]]
+names(sm50_sim1)
+class(sm50_sim1)
+# Then I unlisted that object into separate dataframes for each variable...
+# list2env(setNames(sm50_sim1, paste0("df", seq_along(sm50_sim1))), envir = parent.frame()) #use this if not in markdown file
+list2env(setNames(sm50_sim1, paste0("df", seq_along(sm50_sim1))), envir = environment()) 
+# ...and recombined them into a new dataframe.
+df50 <- data.frame(df1, df2, df3, df4)
+# Unfortunately, in that process I lost the names of the variables, so I added them back.
+df50b <- df50 %>% 
+  dplyr::rename(times = df1,
+                NS = df2, 
+                NI = df3, 
+                NR = df4)
+```
+
+```{r}
+# Now I can plot like I prefer to.
+colorpanel(3, low = "#EFD9D3", high = "#57424A")
+b50_plot <- ggplot(df50b) +                    # basic graphical object
+  geom_line(aes(x = times, y = NS), colour="#EFD9D3") + #lightest
+  geom_line(aes(x = times, y = NI), colour="#A38E8F") + #medium
+  geom_line(aes(x = times, y = NR), colour="#57424A") + #dark
+  scale_x_continuous(limits = c(0, 4), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 35), expand = c(0, 0)) +
+  xlab("time") + ylab("population") +
+  theme_classic()
+b50_plot
+```
+
+# Threshold models####
+Threshold models are better for things that spread with complex contagion (ideas, behaviors, innovations). 
+
+netdiffuseR is the best package I've seen for this, but updates have been sporatic in recent years.
+More info can be found about it here: https://github.com/USCCANA/netdiffuseR
+
+```{r}
+net
+net_sna_adj <- as_adjacency_matrix(net) # the function needs a matrix, not an igraph or sna object
+n_nodes <- nrow(net_sna_adj)  # Should be 63
+n_nodes
+```
+
+```{r}
+# Get your network as an adjacency matrix
+adj_mat <- as.matrix(get.adjacency(un_net, sparse = FALSE))
+
+# Basic model with minimal parameters
+
+diffnet_simple <- rdiffnet(
+  n = nrow(adj_mat),
+  t = 20,
+  seed.nodes = which(V(un_net)$name == "Kay"),
+  seed.p.adopt = 0.20,
+  exposure.args = list(normalized = TRUE)
+)
+
+
+
+summary(diffnet_simple)
+```
+```{r}
+plot_adopters(diffnet_simple, what = "cumadopt", include.legend = FALSE)
+```
+
+
+There is a single function that allows for a wide range of tweaks to the diffusion process. 
+```{r}
+# n = num. nodes
+# t = num. time points
+# seed.graph = starting graph for simulation (small-world, scale-free, bernoulli/er)
+# rgraph.args = args for rgraph (ex: probability of tie formation)
+# seed.nodes = character or vector (specific nodes, or location in network [random, central, marginal])
+# seed.p.adopt = % early adopters
+# rewire = T/F network rewired
+# threshold.dist = adoption threshold for nodes
+# exposure.args = args for exposure (ex: count or proportion)
+
+diffnet_sw <- rdiffnet(
+  n = 28, #63 nodes
+  t = 10, # 10 time points
+  seed.graph = "small-world", #small-world graph
+  rgraph.args = list(p = 0.3), #30% tie probability
+  seed.nodes = c(1, 25, 50), # chosen nodes
+  seed.p.adopt = 0.1, #10% early adopters
+  rewire = F, #rewire the network
+  threshold.dist = function(i) 0.25, # % alters that need to adopt before ego will
+  exposure.args = list(normalized = T) #rather than having exposure be a count, it's a proportion
+)
+diffnet_sw
+# a few details - 100% adopted by the end of the time
+summary(diffnet_sw) 
+# period = point in time
+# adopters = how many nodes adopted
+# cum. adopt. % = proportion adopers
+# hazard rate = prob. node adopts if it hasn't yet
+# density = network density
+# moran's I = spatial autocorrelation of adoption
+  # pos = clusterd
+  # neg = dispersed
+  # sig = significant clustering or not?
+# left censoring = at t1, how many adopters?
+# right censoring = at end, how many non-adopters?
+# num. nodes
+table(diffnet_sw$toa) # time of adoption
+plot_diffnet(diffnet_sw, slices = c(1, 5, 10))
+plot_adopters(diffnet_sw, what = "adopt")
+plot_adopters(diffnet_sw, what = "cumadopt", include.legend = FALSE)
+
+set.seed(1)
+diffnet_il <- rdiffnet(
+  # n = 63, #don't need because we're using a real graph
+  t = 10, 
+  seed.graph = net_sna_adj,
+  # rgraph.args = list(p = 0.3), #don't need because we're using a real graph
+  seed.nodes = c(1, 25, 50), # chosen nodes
+  seed.p.adopt = 0.1,
+  rewire = F,
+  threshold.dist = function(i) 0.25, 
+  exposure.args = list(normalized = T)
+  )
+diffnet_il
+summary(diffnet_il)
+table(diffnet_il$toa) # time of adoption
+plot_diffnet(diffnet_il, slices = c(1, 5, 10))
+plot_adopters(diffnet_il, what = "adopt")
+plot_adopters(diffnet_il, what = "cumadopt", include.legend = FALSE)
+```
+
+Plot the adoption curves
+```{r}
+cumadopt_sw <- cumulative_adopt_count(diffnet_sw)["prop", ]
+cumadopt_il <- cumulative_adopt_count(diffnet_il)["prop", ]
+
+adopt_data <- data.frame(
+  time = rep(1:length(cumadopt_sw), 2),
+  adopters = c(cumadopt_sw, cumadopt_il),
+  diffusion = rep(c("Diffusion SW", "Diffusion Il"), each = length(cumadopt_sw))
+)
+
+ggplot(adopt_data, aes(x = time, y = adopters, color = diffusion)) +
+  geom_line(size = 1.2, alpha = 0.5) +
+  labs(x = "Time", y = "Proportion of Adopters", 
+       title = "Comparison of Simulated vs Real Graph Diffusion") +
+  theme_minimal()
+```
+
+Check network attributes
+```{r}
+## find path-length of the two graphs - SW should be lower, which enhances spread
+sw_nets <- diffnet_to_igraph(diffnet_sw, slices=c(1:10))
+sw_net_t1 <- sw_nets[[1]]  # Network at time 1
+
+il_nets <- diffnet_to_igraph(diffnet_il, slices=c(1:10))
+il_net_t1 <- il_nets[[1]]  # Network at time 1
+
+mean_distance(sw_net_t1, directed = T)
+is_directed(sw_net_t1)
+mean_distance(il_net_t1, directed = T)
+is_directed(il_net_t1)
+```
+
+Plot graphs
+```{r}
+toa <- diffnet_sw$toa  # pull time of adoption
+adopted_at_time_1 <- !is.na(toa) & toa <= 1  # pull nodes that adopted at time 1
+sw_nets <- diffnet_to_igraph(diffnet_sw, slices = c(1:10))  #extract network
+sw_net_t1 <- sw_nets[[1]]  #extract network at time 1
+V(sw_net_t1)$adopted <- adopted_at_time_1  # add adoption to network
+sw_net_plot <- ggraph(sw_net_t1) + 
+  geom_edge_link(alpha = 0.5) +
+  geom_node_point(aes(color = adopted), size = 3) +
+  scale_color_manual(values = c("black", "red")) +
+  theme_graph()
+sw_net_plot
+
+toa <- diffnet_il$toa  # pull time of adoption
+adopted_at_time_1 <- !is.na(toa) & toa <= 1  # pull nodes that adopted at time 1
+il_nets <- diffnet_to_igraph(diffnet_il, slices=c(1:10))
+il_net_t1 <- il_nets[[1]]  # Network at time 1
+V(il_net_t1)$adopted <- adopted_at_time_1  # add adoption to network
+il_net_plot <- ggraph(il_net_t1) + 
+  geom_edge_link(alpha = 0.5) +
+  geom_node_point(aes(color = adopted), size = 3) +
+  scale_color_manual(values = c("black", "red")) +
+  theme_graph()
+il_net_plot
+
+nets <- ggarrange(
+  sw_net_plot + theme(text = element_text(family = "sans")),
+  il_net_plot + theme(text = element_text(family = "sans")),
+  ncol = 2
+)
+nets
+```
+
+There are other kinds of random networks that you can use, like scale-free or bernoulli/ER. 
+```{r}
+set.seed(3)
+diffnet_sf <- rdiffnet(
+  n = 63,
+  t = 10, 
+  seed.graph = "scale-free",
+  seed.nodes = c(1, 25, 50), # chosen nodes
+  seed.p.adopt = .1,
+  rewire = F,
+  threshold.dist = function(i) 0.25,
+  exposure.args = list(normalized = T)
+)
+diffnet_sf
+summary(diffnet_sf)
+table(diffnet_sf$toa) # time of adoption
+plot_diffnet(diffnet_sf, slices = c(1, 3, 5))
+plot_adopters(diffnet_sf, what = "cumadopt", include.legend = FALSE)
+plot_adopters(diffnet_sf, what = "adopt") 
+
+diffnet_il # from illustrative graph
+cumadopt_sf <- cumulative_adopt_count(diffnet_sf)["prop", ]
+cumadopt_il
+
+adopt_data <- data.frame(
+  time = rep(1:length(cumadopt_sf), 2),
+  adopters = c(cumadopt_sf, cumadopt_il),
+  diffusion = rep(c("Diffusion SF", "Diffusion Il"), each = length(cumadopt_sf))
+)
+
+ggplot(adopt_data, aes(x = time, y = adopters, color = diffusion)) +
+  geom_line(size = 1.2, alpha = 0.5) +
+  labs(x = "Time", y = "Proportion of Adopters", 
+       title = "Comparison of Simulated vs Real Graph Diffusion") +
+  theme_minimal() 
+```
+
+Check network attributes
+```{r}
+## find degree distribution of the two graphs - SF should be higher because of hubs
+sf_nets <- diffnet_to_igraph(diffnet_sf, slices=c(1:10))
+sf_net_t1 <- sf_nets[[1]]  # Network at time 1
+
+il_nets <- diffnet_to_igraph(diffnet_il, slices=c(1:10))
+il_net_t1 <- il_nets[[1]]  # Network at time 1
+
+class(sf_net_t1)
+class(il_net_t1)
+summary(igraph::degree(sf_net_t1))
+summary(igraph::degree(il_net_t1))
+```
+
+ER Random graph
+```{r}
+set.seed(3)
+diffnet_er <- rdiffnet(
+  n = 63,
+  t = 10, 
+  seed.graph = "bernoulli",
+  seed.nodes = c(1, 25, 50), # chosen nodes
+  seed.p.adopt = .1,
+  rewire = F,
+  threshold.dist = function(i) 0.25,
+  exposure.args = list(normalized = T)
+)
+diffnet_er
+summary(diffnet_er)
+table(diffnet_sf$toa) # time of adoption
+plot_diffnet(diffnet_er, slices = c(1, 3, 5))
+plot_adopters(diffnet_er, what = "cumadopt", include.legend = FALSE)
+plot_adopters(diffnet_er, what = "adopt")
+
+diffnet_il # from illustrative graph
+cumadopt_er <- cumulative_adopt_count(diffnet_er)["prop", ]
+cumadopt_il
+
+adopt_data <- data.frame(
+  time = rep(1:length(cumadopt_er), 2),
+  adopters = c(cumadopt_er, cumadopt_il),
+  diffusion = rep(c("Diffusion ER", "Diffusion Real"), each = length(cumadopt_er))
+)
+ggplot(adopt_data, aes(x = time, y = adopters, color = diffusion)) +
+  geom_line(size = 1.2, alpha = 0.5) +
+  labs(x = "Time", y = "Proportion of Adopters", 
+       title = "Comparison of Simulated vs Real Graph Diffusion") +
+  theme_minimal()
+```
+
+Check network attributes
+```{r}
+## find density/clustering of the two graphs - ER should be lower
+er_nets <- diffnet_to_igraph(diffnet_er, slices=c(1:10))
+er_net_t1 <- er_nets[[1]]  # Network at time 1
+
+il_nets <- diffnet_to_igraph(diffnet_il, slices=c(1:10))
+il_net_t1 <- il_nets[[1]]  # Network at time 1
+
+class(er_net_t1)
+class(il_net_t1)
+transitivity(er_net_t1, type = "global")
+transitivity(il_net_t1, type = "global")
+transitivity(er_net_t1, type = "average")
+transitivity(il_net_t1, type = "average")
+edge_density(er_net_t1)
+edge_density(il_net_t1)
+```
+
+Run a lot of simulations of the diffusion process
+```{r}
+# rdiffnet_multiple is like rdiffnet, but creates multiple simulations
+# running here over the illustrative graph
+
+cores <- detectCores() - 1 #leave 1 free
+
+nsim <- 50 #50 simulations
+
+set.seed(1)
+ans_1 <- rdiffnet_multiple(
+  R              = nsim, #simulations
+  statistic      = function(d) cumulative_adopt_count(d)["prop",], #keep track of the proportion of adopters
+  seed.graph     = net_sna_adj,
+  t              = 10, #10 time points
+  seed.nodes     = "random", #choose random seeds
+  seed.p.adopt   = 0.5, #proportion of early adopters
+  rewire         = FALSE, #don't rewire slices
+  threshold.dist = 1, #set the threshold to 1 (can also run a sample like this: sample(2, n_nodes, TRUE))
+  exposure.args  = list(normalized = F),
+  ncpus          = cores #run over multiple cores to speed it up
+) |> t() #transpose the output
+
+set.seed(1)
+ans_2 <- rdiffnet_multiple(
+  R              = nsim,
+  statistic      = function(d) cumulative_adopt_count(d)["prop",],
+  seed.graph     = net_sna_adj,
+  t              = 10,
+  seed.nodes     = "random",
+  seed.p.adopt   = 0.5,
+  rewire         = FALSE,
+  threshold.dist = 2,
+  exposure.args  = list(normalized = F),
+  ncpus          = cores
+) |> t()
+
+set.seed(1)
+ans_3 <- rdiffnet_multiple(
+  R              = nsim,
+  statistic      = function(d) cumulative_adopt_count(d)["prop",],
+  seed.graph     = net_sna_adj,
+  t              = 10,
+  seed.nodes     = "random",
+  seed.p.adopt   = 0.5,
+  rewire         = FALSE,
+  threshold.dist = 3,
+  exposure.args  = list(normalized = F),
+  ncpus          = cores
+) |> t()
+```
+
+Look at the adoption curves for all of the simulations
+```{r}
+# convert above to dataframes
+df1 <- as.data.frame(ans_1)
+df2 <- as.data.frame(ans_2)
+df3 <- as.data.frame(ans_3)
+
+# mark the threshold value (since that is what I varied)
+df1$threshold <- "1"
+df2$threshold <- "2"
+df3$threshold <- "3"
+
+# make combo dataframe
+df_combined <- bind_rows(df1, df2, df3) %>%
+  pivot_longer(cols = -threshold, names_to = "time", values_to = "prop")
+
+# Convert Time to numeric
+df_combined$time <- as.numeric(df_combined$time)
+
+# df_combined1 <- df_combined %>%
+#   dplyr::filter(time == 1) %>%
+#   dplyr::group_by(threshold) %>%
+#   dplyr::summarize(mean_p = mean(prop)) # check mean at time 1
+
+ggplot(df_combined, aes(x = as.factor(time), y = prop, fill = threshold)) +
+  geom_boxplot(alpha = 0.75) +
+  scale_fill_manual(values = c("cadetblue1", "cadetblue3", "cadetblue4")) +
+  labs(x = "Time", y = "Proportion of Adopters", 
+       title = "Adoption over Time by Threshold") +
+  theme_minimal() +
+  ylim(0, 1)
+
+```
+
+```{r}
+V(net)$name
+```
+
+
+```{r}
+# Remove KAY from the network
+net4 <- igraph::delete_vertices(net, "Kay")
+
+# Visualize the network without KAY
+ggraph(net) +
+  geom_edge_link(color = "black", alpha = 0.3) +
+  geom_node_point(color = "black", fill = "#efd9d3", shape = 21, size = 3) +
+  geom_node_text(aes(label = name), repel = TRUE, size = 4, color = "black") +
+  theme_graph()
+```
+
+```{r}
+# Remove KAY from the network
+net4 <- igraph::delete_vertices(net, "Kay")
+
+# Visualize the network WITHOUT KAY (using net4, not net)
+ggraph(net4) +
+  geom_edge_link(color = "black", alpha = 0.3) +
+  geom_node_point(color = "black", fill = "#efd9d3", shape = 21, size = 3) +
+  geom_node_text(aes(label = ""), repel = TRUE, size = 4, color = "black") +
+  theme_graph()
+```
+
+```{r}
+plot_adopters(diffnet_simple, what = "cumadopt", include.legend = FALSE)
+```
+
+
+```{r}
+set.seed(3)
+
+# Create scale-free adjacency matrix
+net_matrix <- rgraph_ba(t = 27, m = 2)
+
+# Find central node from matrix
+library(igraph)
+net_tmp <- graph_from_adjacency_matrix(net_matrix, mode = "undirected")
+central_node <- which.max(degree(net_tmp))
+
+# Run diffusion
+diffnet_sf <- rdiffnet(
+  seed.graph = net_matrix,
+  n = 28,
+  t = 10, 
+  seed.nodes = central_node,
+  seed.p.adopt = 0.2,
+  rewire = FALSE,
+  threshold.dist = function(i) 0.25,
+  exposure.args = list(normalized = TRUE)
+)
+
+# Verify it worked
+summary(diffnet_sf)
+plot(diffnet_sf)
+```
+```{r}
+plot_adopters(diffnet_sf, what = "cumadopt", include.legend = FALSE)
+```
+
+```{r}
+set.seed(3)
+
+
+
+# Run diffusion
+diffnet_sf <- rdiffnet(
+  seed.graph = adj_matrix,
+  n = 28,
+  t = 20, 
+  seed.p.adopt = 0.2,
+  rewire = FALSE,
+  threshold.dist = function(i) 0.25,
+  exposure.args = list(normalized = TRUE)
+)
+
+# Verify it worked
+summary(diffnet_sf)
+plot(diffnet_sf)
+```
+
+
+```{r}
+set.seed(3)
+
+# Create the diffusion with all nodes
+diffnet_sf <- rdiffnet(
+  n = 28,
+  t = 20, 
+  seed.graph = "scale-free",
+  seed.p.adopt = 0.2,  # Set to 1 since we're manually selecting 20%
+  rewire = FALSE,
+  threshold.dist = function(i) 0.25,
+  exposure.args = list(normalized = TRUE)
+)
+
+# View the adoption matrix
+adoption_matrix <- diffnet_sf$adoption
+print(adoption_matrix)
+
+# See which nodes adopted at each time
+adopters <- diffnet_sf$cumadopt
+print(adopters)
+
+# Summary to verify ~20% adoption
+summary(diffnet_sf)
+
+# Visualize adoption over time
+plot(diffnet_sf)
+
+```
+
+
+```{r}
+# Get your network as an adjacency matrix
+adj_mat <- as.matrix(get.adjacency(un_net, sparse = FALSE))
+
+# Basic model with minimal parameters - FASTER ADOPTION
+diffnet_simple <- rdiffnet(
+  seed.graph = adj_mat,  # Use seed.graph, not graph
+  n = nrow(adj_mat),
+  t = 10,
+  seed.nodes = which(V(un_net)$name == "Kay"),
+  seed.p.adopt = 0.20,
+  exposure.args = list(normalized = TRUE)
+)
+
+summary(diffnet_simple)
+plot(diffnet_simple)
+
+# To make adoption even faster, add a lower threshold
+diffnet_simple_fast <- rdiffnet(
+  seed.graph = adj_mat,
+  n = nrow(adj_mat),
+  t = 15,
+  seed.nodes = which(V(un_net)$name == "Kay"),
+  seed.p.adopt = 0.20,
+  threshold.dist = function(i) 0.20,  # Lower threshold = faster adoption
+  exposure.args = list(normalized = TRUE)
+)
+
+summary(diffnet_simple_fast)
+plot(diffnet_simple)
+```
+
+```{r}
+plot_adopters(diffnet_simple, what = "cumadopt", include.legend = FALSE)
+```
+
